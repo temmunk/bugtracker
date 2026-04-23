@@ -1,6 +1,6 @@
 # BugTracker
 
-A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**, and **vanilla JavaScript**. Includes comprehensive test coverage at every level: unit tests (JUnit + Mockito), integration tests (MockMvc), and end-to-end tests (Selenium + Cucumber BDD).
+A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**, and **vanilla JavaScript**. Features a dashboard with analytics, comments, activity audit log, CSV export, pagination, and comprehensive test coverage at every level.
 
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-green)
@@ -10,22 +10,27 @@ A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**
 ## Features
 
 - **CRUD Operations** — Create, read, update, and delete bug reports
-- **Filtering** — Filter bugs by status, priority, or search by title
+- **Dashboard** — Real-time stats with bug counts by status, priority, and top assignees
+- **Comments** — Add threaded comments to any bug for team collaboration
+- **Activity Log** — Automatic audit trail tracking every create, update, and delete action
+- **Filtering & Search** — Filter by status/priority or search by title
+- **Pagination & Sorting** — Server-side pagination with sortable columns
+- **CSV Export** — Download all bug data as a CSV file
 - **Validation** — Server-side input validation with meaningful error messages
 - **Responsive UI** — Clean, modern interface that works on desktop and mobile
-- **REST API** — Well-structured RESTful API with proper HTTP status codes
+- **REST API** — Well-structured RESTful API with proper HTTP status codes and error handling
 
 ## Tech Stack
 
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
+| Layer       | Technology                                |
+|-------------|-------------------------------------------|
 | Backend     | Java 17, Spring Boot 3.2, Spring Data JPA |
-| Database    | PostgreSQL (H2 for tests)           |
-| Frontend    | HTML, CSS, Vanilla JavaScript       |
-| Unit Tests  | JUnit 5, Mockito                    |
-| Integration | Spring MockMvc                      |
-| E2E Tests   | Selenium WebDriver, Cucumber BDD    |
-| CI/CD       | GitHub Actions                      |
+| Database    | PostgreSQL (H2 for tests)                 |
+| Frontend    | HTML, CSS, Vanilla JavaScript             |
+| Unit Tests  | JUnit 5, Mockito                          |
+| Integration | Spring MockMvc                            |
+| E2E Tests   | Selenium WebDriver, Cucumber BDD          |
+| CI/CD       | GitHub Actions                            |
 
 ## Prerequisites
 
@@ -60,18 +65,41 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## API Endpoints
 
+### Bugs
+
 | Method | Endpoint             | Description            |
 |--------|----------------------|------------------------|
-| GET    | `/api/bugs`          | List all bugs          |
+| GET    | `/api/bugs`          | List bugs (paginated)  |
 | GET    | `/api/bugs/{id}`     | Get bug by ID          |
 | POST   | `/api/bugs`          | Create a new bug       |
 | PUT    | `/api/bugs/{id}`     | Update an existing bug |
 | DELETE | `/api/bugs/{id}`     | Delete a bug           |
+| GET    | `/api/bugs/stats`    | Dashboard statistics   |
+| GET    | `/api/bugs/export`   | Export all bugs to CSV |
 
 **Query parameters** for `GET /api/bugs`:
 - `status` — Filter by status (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`)
 - `priority` — Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
 - `search` — Search bugs by title (case-insensitive)
+- `page` — Page number (default: 0)
+- `size` — Page size (default: 10)
+- `sortBy` — Sort field (default: `createdAt`)
+- `sortDir` — Sort direction: `asc` or `desc` (default: `desc`)
+
+### Comments
+
+| Method | Endpoint                          | Description             |
+|--------|-----------------------------------|-------------------------|
+| GET    | `/api/bugs/{id}/comments`         | List comments for a bug |
+| POST   | `/api/bugs/{id}/comments`         | Add a comment           |
+| DELETE | `/api/bugs/{id}/comments/{cid}`   | Delete a comment        |
+
+### Activity Log
+
+| Method | Endpoint                  | Description                  |
+|--------|---------------------------|------------------------------|
+| GET    | `/api/activity`           | Recent activity (last 20)    |
+| GET    | `/api/activity/bug/{id}`  | Activity history for a bug   |
 
 ## Running Tests
 
@@ -97,9 +125,10 @@ Runs Cucumber BDD scenarios with Selenium WebDriver. Requires Chrome installed. 
 src/
 ├── main/
 │   ├── java/com/bugtracker/
-│   │   ├── controller/     # REST API controllers
+│   │   ├── controller/     # REST API controllers (Bug, Comment, ActivityLog)
+│   │   ├── dto/            # Data transfer objects (DashboardStats)
 │   │   ├── exception/      # Global error handling
-│   │   ├── model/          # JPA entities and enums
+│   │   ├── model/          # JPA entities (Bug, Comment, ActivityLog)
 │   │   ├── repository/     # Spring Data JPA repositories
 │   │   └── service/        # Business logic layer
 │   └── resources/

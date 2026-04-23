@@ -1,32 +1,84 @@
-const API_URL = '/api/bugs';
+const API = '/api/bugs';
 
-const bugTableBody = document.getElementById('bugTableBody');
-const bugForm = document.getElementById('bugForm');
-const bugFormElement = document.getElementById('bugFormElement');
-const formTitle = document.getElementById('formTitle');
-const emptyState = document.getElementById('emptyState');
-const bugTable = document.getElementById('bugTable');
+let currentPage = 0;
+let currentSort = 'createdAt';
+let currentSortDir = 'desc';
+let totalPages = 0;
 
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-const statusFilter = document.getElementById('statusFilter');
-const priorityFilter = document.getElementById('priorityFilter');
-const newBugBtn = document.getElementById('newBugBtn');
-const cancelBtn = document.getElementById('cancelBtn');
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
-newBugBtn.addEventListener('click', () => openForm());
-cancelBtn.addEventListener('click', () => closeForm());
+// Elements
+const bugTableBody = $('#bugTableBody');
+const bugForm = $('#bugForm');
+const bugFormElement = $('#bugFormElement');
+const formTitle = $('#formTitle');
+const emptyState = $('#emptyState');
+const bugTable = $('#bugTable');
+const pagination = $('#pagination');
+const searchInput = $('#searchInput');
+const statusFilter = $('#statusFilter');
+const priorityFilter = $('#priorityFilter');
+
+// Nav
+$$('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        $$('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        $$('.view').forEach(v => v.classList.add('hidden'));
+        const view = btn.dataset.view;
+        $(`#${view}View`).classList.remove('hidden');
+        if (view === 'dashboard') loadDashboard();
+        if (view === 'activity') loadGlobalActivity();
+    });
+});
+
+// Bug list events
+$('#newBugBtn').addEventListener('click', () => openForm());
+$('#cancelBtn').addEventListener('click', () => closeForm());
 bugFormElement.addEventListener('submit', handleSubmit);
-searchBtn.addEventListener('click', loadBugs);
-searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadBugs(); });
-statusFilter.addEventListener('change', () => { priorityFilter.value = ''; loadBugs(); });
-priorityFilter.addEventListener('change', () => { statusFilter.value = ''; loadBugs(); });
+$('#searchBtn').addEventListener('click', () => { currentPage = 0; loadBugs(); });
+searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { currentPage = 0; loadBugs(); } });
+statusFilter.addEventListener('change', () => { priorityFilter.value = ''; currentPage = 0; loadBugs(); });
+priorityFilter.addEventListener('change', () => { statusFilter.value = ''; currentPage = 0; loadBugs(); });
+
+// Sorting
+$$('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (currentSort === col) {
+            currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = col;
+            currentSortDir = 'asc';
+        }
+        currentPage = 0;
+        loadBugs();
+    });
+});
+
+// Modal
+$('#closeModal').addEventListener('click', closeModal);
+$('#bugDetailModal').addEventListener('click', (e) => {
+    if (e.target.id === 'bugDetailModal') closeModal();
+});
+
+// Comment form
+$('#commentForm').addEventListener('submit', handleCommentSubmit);
 
 loadBugs();
 
+// ---------- BUG LIST ----------
+
 async function loadBugs() {
     try {
-        const params = new URLSearchParams();
+        const params = new URLSearchParams({
+            page: currentPage,
+            size: 10,
+            sortBy: currentSort,
+            sortDir: currentSortDir
+        });
+
         const search = searchInput.value.trim();
         const status = statusFilter.value;
         const priority = priorityFilter.value;
@@ -35,10 +87,12 @@ async function loadBugs() {
         else if (status) params.set('status', status);
         else if (priority) params.set('priority', priority);
 
-        const query = params.toString();
-        const res = await fetch(`${API_URL}${query ? '?' + query : ''}`);
-        const bugs = await res.json();
-        renderBugs(bugs);
+        const res = await fetch(`${API}?${params}`);
+        const data = await res.json();
+        totalPages = data.totalPages;
+        renderBugs(data.content);
+        renderPagination(data);
+        updateSortHeaders();
     } catch (err) {
         console.error('Failed to load bugs:', err);
     }
@@ -50,6 +104,7 @@ function renderBugs(bugs) {
     if (bugs.length === 0) {
         bugTable.classList.add('hidden');
         emptyState.classList.remove('hidden');
+        pagination.classList.add('hidden');
         return;
     }
 
@@ -60,10 +115,10 @@ function renderBugs(bugs) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>#${bug.id}</td>
-            <td><strong>${escapeHtml(bug.title)}</strong></td>
+            <td><span class="bug-title" onclick="viewBug(${bug.id})">${escapeHtml(bug.title)}</span></td>
             <td><span class="badge badge-${bug.priority.toLowerCase()}">${bug.priority}</span></td>
             <td><span class="badge badge-${bug.status.toLowerCase()}">${formatStatus(bug.status)}</span></td>
-            <td>${escapeHtml(bug.assignee || '—')}</td>
+            <td>${escapeHtml(bug.assignee || '\u2014')}</td>
             <td>${formatDate(bug.createdAt)}</td>
             <td class="actions">
                 <button class="btn btn-edit" onclick="editBug(${bug.id})">Edit</button>
@@ -74,50 +129,84 @@ function renderBugs(bugs) {
     });
 }
 
+function renderPagination(data) {
+    if (data.totalPages <= 1) {
+        pagination.classList.add('hidden');
+        return;
+    }
+
+    pagination.classList.remove('hidden');
+    pagination.innerHTML = '';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = '\u25C0 Prev';
+    prevBtn.disabled = data.first;
+    prevBtn.addEventListener('click', () => { currentPage--; loadBugs(); });
+    pagination.appendChild(prevBtn);
+
+    const info = document.createElement('span');
+    info.className = 'page-info';
+    info.textContent = `Page ${data.number + 1} of ${data.totalPages} (${data.totalElements} total)`;
+    pagination.appendChild(info);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next \u25B6';
+    nextBtn.disabled = data.last;
+    nextBtn.addEventListener('click', () => { currentPage++; loadBugs(); });
+    pagination.appendChild(nextBtn);
+}
+
+function updateSortHeaders() {
+    $$('th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (th.dataset.sort === currentSort) {
+            th.classList.add(currentSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    });
+}
+
+// ---------- FORM ----------
+
 function openForm(bug = null) {
     bugForm.classList.remove('hidden');
-
     if (bug) {
         formTitle.textContent = 'Edit Bug';
-        document.getElementById('bugId').value = bug.id;
-        document.getElementById('title').value = bug.title;
-        document.getElementById('description').value = bug.description || '';
-        document.getElementById('priority').value = bug.priority;
-        document.getElementById('status').value = bug.status;
-        document.getElementById('reporter').value = bug.reporter || '';
-        document.getElementById('assignee').value = bug.assignee || '';
+        $('#bugId').value = bug.id;
+        $('#title').value = bug.title;
+        $('#description').value = bug.description || '';
+        $('#priority').value = bug.priority;
+        $('#status').value = bug.status;
+        $('#reporter').value = bug.reporter || '';
+        $('#assignee').value = bug.assignee || '';
     } else {
         formTitle.textContent = 'Report a Bug';
         bugFormElement.reset();
-        document.getElementById('bugId').value = '';
+        $('#bugId').value = '';
     }
-
-    document.getElementById('title').focus();
+    $('#title').focus();
 }
 
 function closeForm() {
     bugForm.classList.add('hidden');
     bugFormElement.reset();
-    document.getElementById('bugId').value = '';
+    $('#bugId').value = '';
 }
 
 async function handleSubmit(e) {
     e.preventDefault();
-
-    const bugId = document.getElementById('bugId').value;
+    const bugId = $('#bugId').value;
     const payload = {
-        title: document.getElementById('title').value,
-        description: document.getElementById('description').value,
-        priority: document.getElementById('priority').value,
-        status: document.getElementById('status').value,
-        reporter: document.getElementById('reporter').value,
-        assignee: document.getElementById('assignee').value
+        title: $('#title').value,
+        description: $('#description').value,
+        priority: $('#priority').value,
+        status: $('#status').value,
+        reporter: $('#reporter').value,
+        assignee: $('#assignee').value
     };
 
     try {
-        const url = bugId ? `${API_URL}/${bugId}` : API_URL;
+        const url = bugId ? `${API}/${bugId}` : API;
         const method = bugId ? 'PUT' : 'POST';
-
         const res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
@@ -129,7 +218,6 @@ async function handleSubmit(e) {
             alert(err.message || 'Failed to save bug');
             return;
         }
-
         closeForm();
         loadBugs();
     } catch (err) {
@@ -139,7 +227,7 @@ async function handleSubmit(e) {
 
 async function editBug(id) {
     try {
-        const res = await fetch(`${API_URL}/${id}`);
+        const res = await fetch(`${API}/${id}`);
         const bug = await res.json();
         openForm(bug);
     } catch (err) {
@@ -149,23 +237,201 @@ async function editBug(id) {
 
 async function deleteBug(id) {
     if (!confirm('Are you sure you want to delete this bug?')) return;
-
     try {
-        await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        await fetch(`${API}/${id}`, { method: 'DELETE' });
         loadBugs();
     } catch (err) {
         console.error('Failed to delete bug:', err);
     }
 }
 
-function formatStatus(status) {
-    return status.replace('_', ' ');
+// ---------- BUG DETAIL MODAL ----------
+
+async function viewBug(id) {
+    try {
+        const [bugRes, commentsRes, activityRes] = await Promise.all([
+            fetch(`${API}/${id}`),
+            fetch(`${API}/${id}/comments`),
+            fetch(`/api/activity/bug/${id}`)
+        ]);
+
+        const bug = await bugRes.json();
+        const comments = await commentsRes.json();
+        const activity = await activityRes.json();
+
+        renderBugDetail(bug, comments, activity);
+        $('#bugDetailModal').classList.remove('hidden');
+        $('#bugDetailModal').dataset.bugId = id;
+    } catch (err) {
+        console.error('Failed to load bug detail:', err);
+    }
 }
 
+function renderBugDetail(bug, comments, activity) {
+    const body = $('#bugDetailBody');
+    body.innerHTML = `
+        <div class="detail-header">
+            <h2>#${bug.id} — ${escapeHtml(bug.title)}</h2>
+            <div class="detail-meta">
+                <span class="badge badge-${bug.priority.toLowerCase()}">${bug.priority}</span>
+                <span class="badge badge-${bug.status.toLowerCase()}">${formatStatus(bug.status)}</span>
+            </div>
+        </div>
+        <div class="detail-body">${escapeHtml(bug.description) || '<em>No description provided.</em>'}</div>
+        <dl class="detail-info">
+            <dt>Reporter</dt><dd>${escapeHtml(bug.reporter) || '\u2014'}</dd>
+            <dt>Assignee</dt><dd>${escapeHtml(bug.assignee) || '\u2014'}</dd>
+            <dt>Created</dt><dd>${formatDateTime(bug.createdAt)}</dd>
+            <dt>Updated</dt><dd>${formatDateTime(bug.updatedAt)}</dd>
+        </dl>
+    `;
+
+    const commentsList = $('#commentsList');
+    if (comments.length === 0) {
+        commentsList.innerHTML = '<p class="activity-empty">No comments yet.</p>';
+    } else {
+        commentsList.innerHTML = comments.map(c => `
+            <div class="comment-item">
+                <div class="comment-header">
+                    <span class="comment-author">${escapeHtml(c.author || 'Anonymous')}</span>
+                    <span class="comment-time">${formatDateTime(c.createdAt)}</span>
+                </div>
+                <div class="comment-body">${escapeHtml(c.body)}</div>
+            </div>
+        `).join('');
+    }
+
+    const activityList = $('#bugActivityList');
+    if (activity.length === 0) {
+        activityList.innerHTML = '<p class="activity-empty">No activity recorded.</p>';
+    } else {
+        activityList.innerHTML = activity.map(a => `
+            <div class="activity-item">
+                <span class="activity-action ${a.action}">${a.action}</span>
+                <span class="activity-details">${escapeHtml(a.details)}</span>
+                <span class="activity-time">${formatDateTime(a.timestamp)}</span>
+            </div>
+        `).join('');
+    }
+}
+
+function closeModal() {
+    $('#bugDetailModal').classList.add('hidden');
+}
+
+async function handleCommentSubmit(e) {
+    e.preventDefault();
+    const bugId = $('#bugDetailModal').dataset.bugId;
+    const payload = {
+        body: $('#commentBody').value,
+        author: $('#commentAuthor').value || null
+    };
+
+    try {
+        const res = await fetch(`${API}/${bugId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            $('#commentBody').value = '';
+            viewBug(bugId);
+        }
+    } catch (err) {
+        console.error('Failed to post comment:', err);
+    }
+}
+
+// ---------- DASHBOARD ----------
+
+async function loadDashboard() {
+    try {
+        const res = await fetch(`${API}/stats`);
+        const stats = await res.json();
+        renderDashboard(stats);
+    } catch (err) {
+        console.error('Failed to load dashboard:', err);
+    }
+}
+
+function renderDashboard(stats) {
+    const grid = $('#statsGrid');
+    const open = stats.byStatus.OPEN || 0;
+    const inProgress = stats.byStatus.IN_PROGRESS || 0;
+    const resolved = stats.byStatus.RESOLVED || 0;
+    const closed = stats.byStatus.CLOSED || 0;
+
+    grid.innerHTML = `
+        <div class="stat-tile"><div class="stat-value">${stats.totalBugs}</div><div class="stat-label">Total Bugs</div></div>
+        <div class="stat-tile"><div class="stat-value" style="color:#1d4ed8">${open}</div><div class="stat-label">Open</div></div>
+        <div class="stat-tile"><div class="stat-value" style="color:#92400e">${inProgress}</div><div class="stat-label">In Progress</div></div>
+        <div class="stat-tile"><div class="stat-value" style="color:#065f46">${resolved}</div><div class="stat-label">Resolved</div></div>
+        <div class="stat-tile"><div class="stat-value" style="color:#475569">${closed}</div><div class="stat-label">Closed</div></div>
+    `;
+
+    renderBarChart('statusBars', stats.byStatus, {
+        OPEN: '#3b82f6', IN_PROGRESS: '#f59e0b', RESOLVED: '#22c55e', CLOSED: '#94a3b8'
+    });
+
+    renderBarChart('priorityBars', stats.byPriority, {
+        LOW: '#94a3b8', MEDIUM: '#f59e0b', HIGH: '#f97316', CRITICAL: '#ef4444'
+    });
+}
+
+function renderBarChart(containerId, data, colors) {
+    const container = $(`#${containerId}`);
+    const max = Math.max(...Object.values(data), 1);
+    container.innerHTML = Object.entries(data).map(([key, val]) => `
+        <div class="bar-item">
+            <span class="bar-label">${formatStatus(key)}</span>
+            <div class="bar-track">
+                <div class="bar-fill" style="width:${(val / max) * 100}%; background:${colors[key] || '#94a3b8'}"></div>
+            </div>
+            <span class="bar-count">${val}</span>
+        </div>
+    `).join('');
+}
+
+// ---------- GLOBAL ACTIVITY ----------
+
+async function loadGlobalActivity() {
+    try {
+        const res = await fetch('/api/activity');
+        const activity = await res.json();
+        const list = $('#activityList');
+
+        if (activity.length === 0) {
+            list.innerHTML = '<p class="activity-empty">No activity yet. Create a bug to get started.</p>';
+            return;
+        }
+
+        list.innerHTML = activity.map(a => `
+            <div class="activity-item">
+                <span class="activity-action ${a.action}">${a.action}</span>
+                <span class="activity-details">Bug #${a.bugId} — ${escapeHtml(a.details)}${a.performedBy ? ' (by ' + escapeHtml(a.performedBy) + ')' : ''}</span>
+                <span class="activity-time">${formatDateTime(a.timestamp)}</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('Failed to load activity:', err);
+    }
+}
+
+// ---------- HELPERS ----------
+
+function formatStatus(s) { return s.replace(/_/g, ' '); }
+
 function formatDate(dateStr) {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (!dateStr) return '\u2014';
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return '\u2014';
+    return new Date(dateStr).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
 }
 
 function escapeHtml(str) {

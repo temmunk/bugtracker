@@ -1,5 +1,6 @@
 package com.bugtracker.controller;
 
+import com.bugtracker.dto.DashboardStats;
 import com.bugtracker.exception.BugNotFoundException;
 import com.bugtracker.model.Bug;
 import com.bugtracker.model.BugPriority;
@@ -12,12 +13,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,48 +50,53 @@ class BugControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/bugs returns all bugs")
+    @DisplayName("GET /api/bugs returns paginated bugs")
     void getAllBugs() throws Exception {
         Bug bug2 = new Bug("Page crash", "Dashboard crashes", BugPriority.CRITICAL, BugStatus.OPEN, "carol", null);
         bug2.setId(2L);
-        when(bugService.getAllBugs()).thenReturn(Arrays.asList(sampleBug, bug2));
+        Page<Bug> page = new PageImpl<>(Arrays.asList(sampleBug, bug2), PageRequest.of(0, 10), 2);
+        when(bugService.getAllBugsPaged(any())).thenReturn(page);
 
         mockMvc.perform(get("/api/bugs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].title", is("Login button broken")))
-                .andExpect(jsonPath("$[1].title", is("Page crash")));
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[0].title", is("Login button broken")))
+                .andExpect(jsonPath("$.totalElements", is(2)));
     }
 
     @Test
     @DisplayName("GET /api/bugs?status=OPEN filters by status")
     void getBugsByStatus() throws Exception {
-        when(bugService.getBugsByStatus(BugStatus.OPEN)).thenReturn(List.of(sampleBug));
+        Page<Bug> page = new PageImpl<>(List.of(sampleBug), PageRequest.of(0, 10), 1);
+        when(bugService.getBugsByStatusPaged(eq(BugStatus.OPEN), any())).thenReturn(page);
 
         mockMvc.perform(get("/api/bugs").param("status", "OPEN"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].status", is("OPEN")));
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].status", is("OPEN")));
     }
 
     @Test
     @DisplayName("GET /api/bugs?search=login searches by keyword")
     void searchBugs() throws Exception {
-        when(bugService.searchBugs("login")).thenReturn(List.of(sampleBug));
+        Page<Bug> page = new PageImpl<>(List.of(sampleBug), PageRequest.of(0, 10), 1);
+        when(bugService.searchBugsPaged(eq("login"), any())).thenReturn(page);
 
         mockMvc.perform(get("/api/bugs").param("search", "login"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)));
+                .andExpect(jsonPath("$.content", hasSize(1)));
     }
 
     @Test
-    @DisplayName("GET /api/bugs returns empty list when no bugs exist")
+    @DisplayName("GET /api/bugs returns empty page when no bugs exist")
     void getAllBugs_empty() throws Exception {
-        when(bugService.getAllBugs()).thenReturn(Collections.emptyList());
+        Page<Bug> page = new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 10), 0);
+        when(bugService.getAllBugsPaged(any())).thenReturn(page);
 
         mockMvc.perform(get("/api/bugs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.totalElements", is(0)));
     }
 
     @Test
@@ -118,11 +125,9 @@ class BugControllerTest {
     void createBug() throws Exception {
         when(bugService.createBug(any(Bug.class))).thenReturn(sampleBug);
 
-        String json = objectMapper.writeValueAsString(sampleBug);
-
         mockMvc.perform(post("/api/bugs")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
+                        .content(objectMapper.writeValueAsString(sampleBug)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title", is("Login button broken")));
     }
@@ -171,5 +176,34 @@ class BugControllerTest {
 
         mockMvc.perform(delete("/api/bugs/99"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/bugs/stats returns dashboard statistics")
+    void getDashboardStats() throws Exception {
+        Map<String, Long> byStatus = new LinkedHashMap<>();
+        byStatus.put("OPEN", 5L);
+        byStatus.put("CLOSED", 3L);
+        Map<String, Long> byPriority = new LinkedHashMap<>();
+        byPriority.put("HIGH", 4L);
+        byPriority.put("LOW", 2L);
+        DashboardStats stats = new DashboardStats(8, byStatus, byPriority, Map.of("bob", 3L));
+        when(bugService.getDashboardStats()).thenReturn(stats);
+
+        mockMvc.perform(get("/api/bugs/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalBugs", is(8)))
+                .andExpect(jsonPath("$.byStatus.OPEN", is(5)));
+    }
+
+    @Test
+    @DisplayName("GET /api/bugs/export returns CSV file")
+    void exportCsv() throws Exception {
+        when(bugService.getAllBugsForExport()).thenReturn(List.of(sampleBug));
+
+        mockMvc.perform(get("/api/bugs/export"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("bugs_export.csv")))
+                .andExpect(content().contentType("text/csv"));
     }
 }

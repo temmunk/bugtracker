@@ -19,6 +19,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +29,9 @@ class BugServiceTest {
 
     @Mock
     private BugRepository bugRepository;
+
+    @Mock
+    private ActivityLogService activityLogService;
 
     @InjectMocks
     private BugService bugService;
