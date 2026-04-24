@@ -38,31 +38,6 @@ A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**
 - Maven 3.8+
 - PostgreSQL 14+
 
-## Getting Started
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/temmunk/bugtracker.git
-cd bugtracker
-```
-
-### 2. Set up the database
-
-```sql
-CREATE DATABASE bugtracker;
-```
-
-The default connection settings in `application.properties` expect PostgreSQL running on `localhost:5432` with user `postgres` / password `postgres`. Update as needed.
-
-### 3. Run the application
-
-```bash
-mvn spring-boot:run
-```
-
-Open [http://localhost:8080](http://localhost:8080) in your browser.
-
 ## API Endpoints
 
 ### Bugs
