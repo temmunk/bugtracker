@@ -8,6 +8,8 @@ import com.bugtracker.model.BugStatus;
 import com.bugtracker.repository.BugRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -53,6 +55,9 @@ public class BugService {
     public Bug createBug(Bug bug) {
         if (bug.getStatus() == null) {
             bug.setStatus(BugStatus.OPEN);
+        }
+        if (bug.getReporter() == null || bug.getReporter().isBlank()) {
+            bug.setReporter(getCurrentUsername());
         }
         Bug saved = bugRepository.save(bug);
         activityLogService.log(saved.getId(), "CREATED",
@@ -138,5 +143,13 @@ public class BugService {
 
     public List<Bug> getAllBugsForExport() {
         return bugRepository.findAll();
+    }
+
+    private String getCurrentUsername() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
     }
 }

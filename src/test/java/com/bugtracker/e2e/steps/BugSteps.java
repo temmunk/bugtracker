@@ -3,7 +3,10 @@ package com.bugtracker.e2e.steps;
 import com.bugtracker.model.Bug;
 import com.bugtracker.model.BugPriority;
 import com.bugtracker.model.BugStatus;
+import com.bugtracker.model.Role;
+import com.bugtracker.model.User;
 import com.bugtracker.repository.BugRepository;
+import com.bugtracker.repository.UserRepository;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.And;
@@ -21,6 +24,7 @@ import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 
@@ -34,6 +38,12 @@ public class BugSteps {
     @Autowired
     private BugRepository bugRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     private WebDriver driver;
     private WebDriverWait wait;
 
@@ -43,6 +53,11 @@ public class BugSteps {
         options.addArguments("--headless", "--no-sandbox", "--disable-dev-shm-usage");
         driver = new ChromeDriver(options);
         wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        if (!userRepository.existsByUsername("testuser")) {
+            User user = new User("testuser", passwordEncoder.encode("password123"), "test@test.com", Role.USER);
+            userRepository.save(user);
+        }
     }
 
     @After
@@ -56,6 +71,12 @@ public class BugSteps {
     @Given("I am on the BugTracker home page")
     public void iAmOnTheHomePage() {
         driver.get("http://localhost:" + port);
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.id("loginForm")));
+
+        driver.findElement(By.id("loginUsername")).sendKeys("testuser");
+        driver.findElement(By.id("loginPassword")).sendKeys("password123");
+        driver.findElement(By.cssSelector("#loginForm button[type='submit']")).click();
+
         wait.until(ExpectedConditions.presenceOfElementLocated(By.id("bugTableBody")));
     }
 

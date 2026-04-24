@@ -1,4 +1,5 @@
 const API = '/api/bugs';
+const AUTH_API = '/api/auth';
 
 let currentPage = 0;
 let currentSort = 'createdAt';
@@ -20,9 +21,177 @@ const searchInput = $('#searchInput');
 const statusFilter = $('#statusFilter');
 const priorityFilter = $('#priorityFilter');
 
+// ---------- AUTH ----------
+
+function getToken() {
+    return localStorage.getItem('jwt_token');
+}
+
+function getUser() {
+    const raw = localStorage.getItem('jwt_user');
+    return raw ? JSON.parse(raw) : null;
+}
+
+function setAuth(token, username, role) {
+    localStorage.setItem('jwt_token', token);
+    localStorage.setItem('jwt_user', JSON.stringify({ username, role }));
+}
+
+function clearAuth() {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('jwt_user');
+}
+
+function isLoggedIn() {
+    return !!getToken();
+}
+
+function authFetch(url, options = {}) {
+    const token = getToken();
+    if (token) {
+        options.headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+        };
+    }
+    return fetch(url, options);
+}
+
+function updateAuthUI() {
+    const loggedIn = isLoggedIn();
+    const user = getUser();
+
+    const authView = $('#authView');
+    const userInfo = $('#userInfo');
+
+    if (loggedIn && user) {
+        authView.classList.add('hidden');
+        userInfo.classList.remove('hidden');
+        $('#usernameDisplay').textContent = user.username;
+        $$('.auth-required').forEach(el => el.classList.remove('hidden'));
+    } else {
+        authView.classList.remove('hidden');
+        userInfo.classList.add('hidden');
+        $$('.auth-required').forEach(el => el.classList.add('hidden'));
+    }
+}
+
+function showAppViews() {
+    if (!isLoggedIn()) {
+        $$('.view').forEach(v => v.classList.add('hidden'));
+        $('#authView').classList.remove('hidden');
+        return;
+    }
+    $('#authView').classList.add('hidden');
+}
+
+// Auth tabs
+$$('.auth-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        $$('.auth-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        if (tab.dataset.tab === 'login') {
+            $('#loginForm').classList.remove('hidden');
+            $('#registerForm').classList.add('hidden');
+        } else {
+            $('#loginForm').classList.add('hidden');
+            $('#registerForm').classList.remove('hidden');
+        }
+        $('#loginError').classList.add('hidden');
+        $('#registerError').classList.add('hidden');
+        $('#registerSuccess').classList.add('hidden');
+    });
+});
+
+// Login
+$('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = $('#loginError');
+    errorEl.classList.add('hidden');
+
+    const payload = {
+        username: $('#loginUsername').value,
+        password: $('#loginPassword').value
+    };
+
+    try {
+        const res = await fetch(`${AUTH_API}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            errorEl.textContent = data.message || 'Login failed';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        const data = await res.json();
+        setAuth(data.token, data.username, data.role);
+        $('#loginForm').reset();
+        updateAuthUI();
+        showAppViews();
+        $('#bugsView').classList.remove('hidden');
+        $$('.nav-btn').forEach(b => b.classList.remove('active'));
+        $$('.nav-btn')[0].classList.add('active');
+        loadBugs();
+    } catch (err) {
+        errorEl.textContent = 'Connection error. Please try again.';
+        errorEl.classList.remove('hidden');
+    }
+});
+
+// Register
+$('#registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = $('#registerError');
+    const successEl = $('#registerSuccess');
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
+    const payload = {
+        username: $('#regUsername').value,
+        password: $('#regPassword').value,
+        email: $('#regEmail').value || null
+    };
+
+    try {
+        const res = await fetch(`${AUTH_API}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.message || data.errors?.username || 'Registration failed';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        successEl.textContent = 'Account created! You can now log in.';
+        successEl.classList.remove('hidden');
+        $('#registerForm').reset();
+    } catch (err) {
+        errorEl.textContent = 'Connection error. Please try again.';
+        errorEl.classList.remove('hidden');
+    }
+});
+
+// Logout
+$('#logoutBtn').addEventListener('click', () => {
+    clearAuth();
+    updateAuthUI();
+    showAppViews();
+});
+
 // Nav
 $$('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+        if (!isLoggedIn()) return;
         $$('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         $$('.view').forEach(v => v.classList.add('hidden'));
@@ -66,7 +235,13 @@ $('#bugDetailModal').addEventListener('click', (e) => {
 // Comment form
 $('#commentForm').addEventListener('submit', handleCommentSubmit);
 
-loadBugs();
+// Init
+updateAuthUI();
+if (isLoggedIn()) {
+    loadBugs();
+} else {
+    showAppViews();
+}
 
 // ---------- BUG LIST ----------
 
@@ -87,7 +262,7 @@ async function loadBugs() {
         else if (status) params.set('status', status);
         else if (priority) params.set('priority', priority);
 
-        const res = await fetch(`${API}?${params}`);
+        const res = await authFetch(`${API}?${params}`);
         const data = await res.json();
         totalPages = data.totalPages;
         renderBugs(data.content);
@@ -111,8 +286,17 @@ function renderBugs(bugs) {
     bugTable.classList.remove('hidden');
     emptyState.classList.add('hidden');
 
+    const loggedIn = isLoggedIn();
+
     bugs.forEach(bug => {
         const row = document.createElement('tr');
+        const actionsHtml = loggedIn
+            ? `<td class="actions">
+                <button class="btn btn-edit" onclick="editBug(${bug.id})">Edit</button>
+                <button class="btn btn-danger" onclick="deleteBug(${bug.id})">Delete</button>
+               </td>`
+            : `<td></td>`;
+
         row.innerHTML = `
             <td>#${bug.id}</td>
             <td><span class="bug-title" onclick="viewBug(${bug.id})">${escapeHtml(bug.title)}</span></td>
@@ -120,10 +304,7 @@ function renderBugs(bugs) {
             <td><span class="badge badge-${bug.status.toLowerCase()}">${formatStatus(bug.status)}</span></td>
             <td>${escapeHtml(bug.assignee || '\u2014')}</td>
             <td>${formatDate(bug.createdAt)}</td>
-            <td class="actions">
-                <button class="btn btn-edit" onclick="editBug(${bug.id})">Edit</button>
-                <button class="btn btn-danger" onclick="deleteBug(${bug.id})">Delete</button>
-            </td>
+            ${actionsHtml}
         `;
         bugTableBody.appendChild(row);
     });
@@ -168,6 +349,7 @@ function updateSortHeaders() {
 // ---------- FORM ----------
 
 function openForm(bug = null) {
+    if (!isLoggedIn()) return;
     bugForm.classList.remove('hidden');
     if (bug) {
         formTitle.textContent = 'Edit Bug';
@@ -182,6 +364,8 @@ function openForm(bug = null) {
         formTitle.textContent = 'Report a Bug';
         bugFormElement.reset();
         $('#bugId').value = '';
+        const user = getUser();
+        if (user) $('#reporter').value = user.username;
     }
     $('#title').focus();
 }
@@ -207,7 +391,7 @@ async function handleSubmit(e) {
     try {
         const url = bugId ? `${API}/${bugId}` : API;
         const method = bugId ? 'PUT' : 'POST';
-        const res = await fetch(url, {
+        const res = await authFetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -226,8 +410,9 @@ async function handleSubmit(e) {
 }
 
 async function editBug(id) {
+    if (!isLoggedIn()) return;
     try {
-        const res = await fetch(`${API}/${id}`);
+        const res = await authFetch(`${API}/${id}`);
         const bug = await res.json();
         openForm(bug);
     } catch (err) {
@@ -236,9 +421,10 @@ async function editBug(id) {
 }
 
 async function deleteBug(id) {
+    if (!isLoggedIn()) return;
     if (!confirm('Are you sure you want to delete this bug?')) return;
     try {
-        await fetch(`${API}/${id}`, { method: 'DELETE' });
+        await authFetch(`${API}/${id}`, { method: 'DELETE' });
         loadBugs();
     } catch (err) {
         console.error('Failed to delete bug:', err);
@@ -250,9 +436,9 @@ async function deleteBug(id) {
 async function viewBug(id) {
     try {
         const [bugRes, commentsRes, activityRes] = await Promise.all([
-            fetch(`${API}/${id}`),
-            fetch(`${API}/${id}/comments`),
-            fetch(`/api/activity/bug/${id}`)
+            authFetch(`${API}/${id}`),
+            authFetch(`${API}/${id}/comments`),
+            authFetch(`/api/activity/bug/${id}`)
         ]);
 
         const bug = await bugRes.json();
@@ -301,6 +487,15 @@ function renderBugDetail(bug, comments, activity) {
         `).join('');
     }
 
+    const commentForm = $('#commentForm');
+    if (isLoggedIn()) {
+        commentForm.classList.remove('hidden');
+        const user = getUser();
+        if (user) $('#commentAuthor').value = user.username;
+    } else {
+        commentForm.classList.add('hidden');
+    }
+
     const activityList = $('#bugActivityList');
     if (activity.length === 0) {
         activityList.innerHTML = '<p class="activity-empty">No activity recorded.</p>';
@@ -321,6 +516,7 @@ function closeModal() {
 
 async function handleCommentSubmit(e) {
     e.preventDefault();
+    if (!isLoggedIn()) return;
     const bugId = $('#bugDetailModal').dataset.bugId;
     const payload = {
         body: $('#commentBody').value,
@@ -328,7 +524,7 @@ async function handleCommentSubmit(e) {
     };
 
     try {
-        const res = await fetch(`${API}/${bugId}/comments`, {
+        const res = await authFetch(`${API}/${bugId}/comments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -347,7 +543,7 @@ async function handleCommentSubmit(e) {
 
 async function loadDashboard() {
     try {
-        const res = await fetch(`${API}/stats`);
+        const res = await authFetch(`${API}/stats`);
         const stats = await res.json();
         renderDashboard(stats);
     } catch (err) {
@@ -397,7 +593,7 @@ function renderBarChart(containerId, data, colors) {
 
 async function loadGlobalActivity() {
     try {
-        const res = await fetch('/api/activity');
+        const res = await authFetch('/api/activity');
         const activity = await res.json();
         const list = $('#activityList');
 

@@ -1,14 +1,16 @@
 # BugTracker
 
-A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**, and **vanilla JavaScript**. Features a dashboard with analytics, comments, activity audit log, CSV export, pagination, and comprehensive test coverage at every level.
+A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**, and **vanilla JavaScript**. Features JWT authentication, a dashboard with analytics, comments, activity audit log, CSV export, pagination, and comprehensive test coverage at every level.
 
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-black)
+![Spring Security](https://img.shields.io/badge/Auth-JWT-blueviolet)
 
 ## Features
 
+- **JWT Authentication** — Register and login with stateless JWT-based auth; Spring Security protects write endpoints while keeping reads public
 - **CRUD Operations** — Create, read, update, and delete bug reports
 - **Dashboard** — Real-time stats with bug counts by status, priority, and top assignees
 - **Comments** — Add threaded comments to any bug for team collaboration
@@ -25,6 +27,7 @@ A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**
 | Layer       | Technology                                |
 |-------------|-------------------------------------------|
 | Backend     | Java 17, Spring Boot 3.2, Spring Data JPA |
+| Auth        | Spring Security, JWT (jjwt), BCrypt       |
 | Database    | PostgreSQL (H2 for tests)                 |
 | Frontend    | HTML, CSS, Vanilla JavaScript             |
 | Unit Tests  | JUnit 5, Mockito                          |
@@ -39,6 +42,15 @@ A full-stack bug tracking application built with **Spring Boot**, **PostgreSQL**
 - PostgreSQL 14+
 
 ## API Endpoints
+
+### Authentication
+
+| Method | Endpoint             | Description              |
+|--------|----------------------|--------------------------|
+| POST   | `/api/auth/register` | Register a new user      |
+| POST   | `/api/auth/login`    | Login and receive a JWT  |
+
+All `GET` endpoints are public. `POST`, `PUT`, and `DELETE` on bugs and comments require a valid JWT in the `Authorization: Bearer <token>` header.
 
 ### Bugs
 
@@ -100,11 +112,12 @@ Runs Cucumber BDD scenarios with Selenium WebDriver. Requires Chrome installed. 
 src/
 ├── main/
 │   ├── java/com/bugtracker/
-│   │   ├── controller/     # REST API controllers (Bug, Comment, ActivityLog)
-│   │   ├── dto/            # Data transfer objects (DashboardStats)
+│   │   ├── controller/     # REST API controllers (Bug, Comment, ActivityLog, Auth)
+│   │   ├── dto/            # Data transfer objects (DashboardStats, Auth DTOs)
 │   │   ├── exception/      # Global error handling
-│   │   ├── model/          # JPA entities (Bug, Comment, ActivityLog)
+│   │   ├── model/          # JPA entities (Bug, Comment, ActivityLog, User)
 │   │   ├── repository/     # Spring Data JPA repositories
+│   │   ├── security/       # JWT filter, config, UserDetailsService
 │   │   └── service/        # Business logic layer
 │   └── resources/
 │       ├── static/         # Frontend (HTML, CSS, JS)

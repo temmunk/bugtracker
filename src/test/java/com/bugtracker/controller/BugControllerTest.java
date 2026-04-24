@@ -5,6 +5,8 @@ import com.bugtracker.exception.BugNotFoundException;
 import com.bugtracker.model.Bug;
 import com.bugtracker.model.BugPriority;
 import com.bugtracker.model.BugStatus;
+import com.bugtracker.security.CustomUserDetailsService;
+import com.bugtracker.security.JwtUtil;
 import com.bugtracker.service.BugService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.*;
@@ -36,6 +39,12 @@ class BugControllerTest {
 
     @MockBean
     private BugService bugService;
+
+    @MockBean
+    private JwtUtil jwtUtil;
+
+    @MockBean
+    private CustomUserDetailsService customUserDetailsService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -121,6 +130,7 @@ class BugControllerTest {
     }
 
     @Test
+    @WithMockUser
     @DisplayName("POST /api/bugs creates a new bug")
     void createBug() throws Exception {
         when(bugService.createBug(any(Bug.class))).thenReturn(sampleBug);
@@ -133,6 +143,7 @@ class BugControllerTest {
     }
 
     @Test
+    @WithMockUser
     @DisplayName("POST /api/bugs returns 400 when title is blank")
     void createBug_validationError() throws Exception {
         Bug invalid = new Bug("", "desc", BugPriority.LOW, BugStatus.OPEN, null, null);
@@ -144,6 +155,7 @@ class BugControllerTest {
     }
 
     @Test
+    @WithMockUser
     @DisplayName("PUT /api/bugs/{id} updates existing bug")
     void updateBug() throws Exception {
         Bug updated = new Bug("Updated title", "Updated desc", BugPriority.LOW, BugStatus.RESOLVED, "alice", "dave");
@@ -159,6 +171,7 @@ class BugControllerTest {
     }
 
     @Test
+    @WithMockUser
     @DisplayName("DELETE /api/bugs/{id} returns 204 on success")
     void deleteBug() throws Exception {
         doNothing().when(bugService).deleteBug(1L);
@@ -170,6 +183,7 @@ class BugControllerTest {
     }
 
     @Test
+    @WithMockUser
     @DisplayName("DELETE /api/bugs/{id} returns 404 when not found")
     void deleteBug_notFound() throws Exception {
         doThrow(new BugNotFoundException(99L)).when(bugService).deleteBug(99L);

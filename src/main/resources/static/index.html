@@ -15,10 +15,55 @@
                 <button class="nav-btn" data-view="dashboard">Dashboard</button>
                 <button class="nav-btn" data-view="activity">Activity</button>
             </nav>
+            <div id="userInfo" class="user-info hidden">
+                <span id="usernameDisplay"></span>
+                <button id="logoutBtn" class="btn btn-logout">Logout</button>
+            </div>
         </div>
     </header>
 
     <main>
+        <!-- AUTH VIEW -->
+        <section id="authView" class="view hidden">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" data-tab="login">Login</button>
+                        <button class="auth-tab" data-tab="register">Register</button>
+                    </div>
+                    <form id="loginForm" class="auth-form">
+                        <div class="form-group">
+                            <label for="loginUsername">Username</label>
+                            <input type="text" id="loginUsername" required minlength="3">
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword">Password</label>
+                            <input type="password" id="loginPassword" required>
+                        </div>
+                        <div id="loginError" class="auth-error hidden"></div>
+                        <button type="submit" class="btn btn-primary btn-block">Login</button>
+                    </form>
+                    <form id="registerForm" class="auth-form hidden">
+                        <div class="form-group">
+                            <label for="regUsername">Username</label>
+                            <input type="text" id="regUsername" required minlength="3" maxlength="50">
+                        </div>
+                        <div class="form-group">
+                            <label for="regEmail">Email</label>
+                            <input type="email" id="regEmail">
+                        </div>
+                        <div class="form-group">
+                            <label for="regPassword">Password</label>
+                            <input type="password" id="regPassword" required minlength="6">
+                        </div>
+                        <div id="registerError" class="auth-error hidden"></div>
+                        <div id="registerSuccess" class="auth-success hidden"></div>
+                        <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
         <!-- DASHBOARD VIEW -->
         <section id="dashboardView" class="view hidden">
             <div class="stats-grid" id="statsGrid"></div>
@@ -65,7 +110,7 @@
                         <option value="CRITICAL">Critical</option>
                     </select>
                     <a href="/api/bugs/export" class="btn btn-secondary" download>Export CSV</a>
-                    <button id="newBugBtn" class="btn btn-primary">+ New Bug</button>
+                    <button id="newBugBtn" class="btn btn-primary auth-required">+ New Bug</button>
                 </div>
             </section>
 

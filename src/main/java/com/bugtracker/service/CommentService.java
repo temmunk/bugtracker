@@ -3,6 +3,8 @@ package com.bugtracker.service;
 import com.bugtracker.model.Bug;
 import com.bugtracker.model.Comment;
 import com.bugtracker.repository.CommentRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,6 +28,9 @@ public class CommentService {
     public Comment addComment(Long bugId, Comment comment) {
         Bug bug = bugService.getBugById(bugId);
         comment.setBug(bug);
+        if (comment.getAuthor() == null || comment.getAuthor().isBlank()) {
+            comment.setAuthor(getCurrentUsername());
+        }
         return commentRepository.save(comment);
     }
 
@@ -33,5 +38,13 @@ public class CommentService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new RuntimeException("Comment not found with id: " + commentId));
         commentRepository.delete(comment);
+    }
+
+    private String getCurrentUsername() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
     }
 }
